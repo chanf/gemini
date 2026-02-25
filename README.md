@@ -161,6 +161,13 @@ OPENAI_API_BASE="https://my-super-proxy.vercel.app/v1"
 
 访问部署地址后的 `/ui` 路径（例如 `https://your-worker.example.com/ui`）即可打开测试控制台。
 
+**界面特性：**
+
+- **响应式布局**
+  - 左右分栏设计，配置面板和聊天区域独立滚动
+  - 移动端自动切换为垂直布局
+  - 顶部导航栏包含 GitHub 仓库链接
+
 **功能特性：**
 
 - **连接配置**
@@ -179,6 +186,7 @@ OPENAI_API_BASE="https://my-super-proxy.vercel.app/v1"
   - 停止生成功能
   - 基础 Markdown 渲染（支持代码块、链接、粗体、斜体等）
   - 清空会话历史
+  - **显示消息使用的模型名称**（Assistant 消息右侧标注模型）
 
 - **数据存储**
   - API 配置保存在浏览器 `localStorage`（持久化）
