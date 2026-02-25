@@ -41,6 +41,9 @@ export function getHtml() {
         <div class="field">
           <label class="label" for="apiKey">Gemini API Key</label>
           <input id="apiKey" type="password" spellcheck="false" autocomplete="off" placeholder="AI...">
+          <p class="hint">
+            <a href="https://aistudio.google.com/app/api-keys" target="_blank" rel="noopener noreferrer">获取 API Key</a>
+          </p>
         </div>
 
         <div class="row">
