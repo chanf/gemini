@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { handleUiRequest } from "./ui.mjs";
 
 export default {
   async fetch (request) {
@@ -10,6 +11,13 @@ export default {
       return new Response(err.message, fixCors({ status: err.status ?? 500 }));
     };
     try {
+      const { pathname } = new URL(request.url);
+      if (request.method === "GET") {
+        const uiResponse = handleUiRequest(pathname);
+        if (uiResponse) {
+          return uiResponse;
+        }
+      }
       const auth = request.headers.get("Authorization");
       const apiKey = auth?.split(" ")[1];
       const assert = (success) => {
@@ -17,7 +25,6 @@ export default {
           throw new HttpError("The specified HTTP method is not allowed for the requested resource", 400);
         }
       };
-      const { pathname } = new URL(request.url);
       switch (true) {
         case pathname.endsWith("/chat/completions"):
           assert(request.method === "POST");
