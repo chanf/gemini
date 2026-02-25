@@ -32,18 +32,34 @@ export async function loadModels(state, elements, config) {
 
 export function renderModelList(state, elements) {
   const filter = String(elements.modelFilter.value || '').toLowerCase().trim();
+  const availableOnly = elements.availableOnly && elements.availableOnly.checked;
   elements.modelList.innerHTML = '';
 
   const models = state.models.filter((id) => {
-    return !filter || id.toLowerCase().indexOf(filter) >= 0;
+    // Text filter
+    if (filter && id.toLowerCase().indexOf(filter) < 0) {
+      return false;
+    }
+    // Availability filter
+    if (availableOnly) {
+      const status = state.modelStatus && state.modelStatus[id] ? state.modelStatus[id] : 'unknown';
+      return status === 'available';
+    }
+    return true;
   });
 
   if (!models.length) {
     const empty = document.createElement('p');
     empty.className = 'hint';
-    empty.textContent = state.models.length
-      ? 'No model matched current filter.'
-      : 'Load models to display available model IDs.';
+    if (state.models.length) {
+      if (availableOnly) {
+        empty.textContent = 'No available models. Click "Check Availability" first.';
+      } else {
+        empty.textContent = 'No model matched current filter.';
+      }
+    } else {
+      empty.textContent = 'Load models to display available model IDs.';
+    }
     elements.modelList.appendChild(empty);
     return;
   }

@@ -67,6 +67,13 @@ export function getHtml() {
           <input id="modelFilter" type="search" spellcheck="false" placeholder="Search model id...">
         </div>
 
+        <div class="row">
+          <label class="toggle" for="availableOnly">
+            <input id="availableOnly" type="checkbox">
+            只显示可用模型
+          </label>
+        </div>
+
         <div class="models" id="modelList"></div>
 
         <div class="field">
@@ -168,6 +175,7 @@ export function getHtml() {
       loadModels: document.getElementById('loadModels'),
       checkModels: document.getElementById('checkModels'),
       modelFilter: document.getElementById('modelFilter'),
+      availableOnly: document.getElementById('availableOnly'),
       modelList: document.getElementById('modelList'),
       modelInput: document.getElementById('modelInput'),
       saveModel: document.getElementById('saveModel'),
@@ -277,6 +285,7 @@ export function getHtml() {
     });
 
     elements.modelFilter.addEventListener('input', () => renderModelList(state, elements));
+    elements.availableOnly.addEventListener('change', () => renderModelList(state, elements));
     elements.modelInput.addEventListener('input', () => renderModelList(state, elements));
     elements.saveModel.addEventListener('click', saveModelSelection);
 
