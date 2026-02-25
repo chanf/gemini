@@ -455,6 +455,7 @@ export function getHtml() {
             assistantMessage.content = content || '(No text content in response)';
             persistMessages(state.messages);
             renderHistory(elements, state);
+            return Promise.resolve();
           });
         }
       }).then(function() {
