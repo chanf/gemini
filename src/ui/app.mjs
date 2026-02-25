@@ -784,6 +784,13 @@ export function getHtml() {
     elements.modelInput.addEventListener('input', function() { renderModelList(state, elements); });
     elements.saveModel.addEventListener('click', saveModelSelection);
 
+    elements.prompt.addEventListener('keydown', function(event) {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault();
+        elements.chatForm.requestSubmit();
+      }
+    });
+
     elements.chatForm.addEventListener('submit', function(event) {
       event.preventDefault();
       if (state.isSending) return;
