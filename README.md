@@ -159,14 +159,30 @@ OPENAI_API_BASE="https://my-super-proxy.vercel.app/v1"
 
 ### 内置测试页面（`/ui`）
 
-页面用于快速验证代理是否可用，主要能力：
+访问部署地址后的 `/ui` 路径（例如 `https://your-worker.example.com/ui`）即可打开测试控制台。
 
-- 输入 API Key，点击保存到浏览器本地缓存（`localStorage`）
-- 自定义 API Base URL（默认：当前站点的 `/v1`，点击保存才会写入本地缓存）
-- 拉取并展示可用模型列表（`GET /models`）
-- 简易聊天工具（默认流式输出，支持“停止生成”）
-- 基础 Markdown 渲染
-- 聊天历史仅保留在当前浏览器会话（`sessionStorage`，关闭浏览器会清除）
+**功能特性：**
+
+- **连接配置**
+  - API Key 输入和保存（存储在 `localStorage`）
+  - 自定义 API Base URL（默认自动检测为当前站点的 `/v1`）
+  - 完整 URL 示例提示：`https://your-worker.example.com/v1`
+
+- **模型管理**
+  - 拉取并展示可用模型列表（`GET /models`）
+  - 模型搜索过滤功能
+  - 一键选择聊天模型
+
+- **聊天界面**
+  - 流式/非流式响应切换
+  - 实时消息计数显示
+  - 停止生成功能
+  - 基础 Markdown 渲染（支持代码块、链接、粗体、斜体等）
+  - 清空会话历史
+
+- **数据存储**
+  - API 配置保存在浏览器 `localStorage`（持久化）
+  - 聊天历史保存在 `sessionStorage`（关闭浏览器自动清除）
 
 
 ## 模型

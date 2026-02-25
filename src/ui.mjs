@@ -382,8 +382,14 @@ const UI_HTML = `<!doctype html>
     .composer-top {
       display: grid;
       gap: 8px;
-      grid-template-columns: minmax(0, 1fr) 170px;
-      align-items: start;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+    }
+
+    .composer-options {
+      display: flex;
+      gap: 12px;
+      align-items: center;
     }
 
     .toggle {
@@ -435,6 +441,12 @@ const UI_HTML = `<!doctype html>
         grid-template-columns: 1fr;
       }
 
+      .composer-options {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+      }
+
       .composer-actions {
         justify-content: stretch;
       }
@@ -459,6 +471,7 @@ const UI_HTML = `<!doctype html>
         <div class="field">
           <label class="label" for="apiBase">API Base URL</label>
           <input id="apiBase" type="url" spellcheck="false" placeholder="https://example.com/v1">
+          <p class="hint">Full URL: https://your-worker.example.com/v1</p>
         </div>
 
         <div class="row">
@@ -507,19 +520,20 @@ const UI_HTML = `<!doctype html>
         <form id="chatForm" class="composer">
           <div class="composer-top">
             <textarea id="prompt" placeholder="Type your prompt..."></textarea>
-            <div class="field">
-              <label class="toggle" for="streamToggle">
-                <input id="streamToggle" type="checkbox" checked>
-                Stream response
-              </label>
-              <p class="stat-line" id="messageCount">Messages: 0</p>
-            </div>
+            <button id="sendButton" type="submit">Send</button>
+          </div>
+
+          <div class="composer-options">
+            <label class="toggle" for="streamToggle">
+              <input id="streamToggle" type="checkbox" checked>
+              Stream response
+            </label>
+            <p class="stat-line" id="messageCount">Messages: 0</p>
           </div>
 
           <div class="composer-actions">
             <button id="stopButton" type="button" class="button-danger" disabled>Stop</button>
             <button id="clearHistory" type="button" class="button-ghost">Clear Session History</button>
-            <button id="sendButton" type="submit">Send</button>
           </div>
         </form>
       </section>
