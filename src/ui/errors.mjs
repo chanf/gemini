@@ -6,7 +6,7 @@ export function parseApiError(errorText) {
     if (json.error) {
       const err = json.error;
       if (err.code === 429) {
-        const match = err.message.match(/Please retry in ([\d.]+)s/);
+        const match = err.message.match(new RegExp('Please retry in ([\\d.]+)s'));
         const retrySeconds = match ? Math.ceil(parseFloat(match[1])) : null;
         return {
           type: 'quota',

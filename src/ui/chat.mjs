@@ -180,7 +180,7 @@ async function readSseStream(stream, onDelta) {
 
   function consumeEvent(rawEvent) {
     if (!rawEvent.trim()) return;
-    const lines = rawEvent.split(/\r?\n/);
+    const lines = rawEvent.split(new RegExp('\\r?\\n'));
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
       if (!line.startsWith('data:')) continue;
@@ -201,7 +201,7 @@ async function readSseStream(stream, onDelta) {
     const chunk = await reader.read();
     if (chunk.done) break;
     buffer += decoder.decode(chunk.value, { stream: true });
-    const events = buffer.split(/\r?\n\r?\n/);
+    const events = buffer.split(new RegExp('\\r?\\n\\r?\\n'));
     buffer = events.pop() || '';
     for (let i = 0; i < events.length; i += 1) {
       if (consumeEvent(events[i]) === 'done') return;

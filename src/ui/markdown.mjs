@@ -1,11 +1,11 @@
 // Utility functions
 export function escapeHtml(value) {
   return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(new RegExp('&', 'g'), '&amp;')
+    .replace(new RegExp('<', 'g'), '&lt;')
+    .replace(new RegExp('>', 'g'), '&gt;')
+    .replace(new RegExp('"', 'g'), '&quot;')
+    .replace(new RegExp("'", 'g'), '&#39;');
 }
 
 export function safeJsonParse(input, fallback) {
@@ -20,23 +20,23 @@ export function safeJsonParse(input, fallback) {
 export function renderInline(raw) {
   const text = escapeHtml(raw);
   const result = text
-    .replace(/\[([^\]]+)\]\((https?:[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    .replace(new RegExp('\\[([^\\]]+)\\]\\((https?:[^\\s)]+)\\)', 'g'), '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(new RegExp('`([^`]+)`', 'g'), '<code>$1</code>')
+    .replace(new RegExp('\\*\\*([^*]+)\\*\\*', 'g'), '<strong>$1</strong>')
+    .replace(new RegExp('\\*([^*]+)\\*', 'g'), '<em>$1</em>');
   return result;
 }
 
 // Block-level markdown rendering
 export function renderMarkdownBlocks(raw) {
-  const lines = String(raw).replace(/\r/g, '').split('\n');
+  const lines = String(raw).replace(new RegExp('\\r', 'g'), '').split('\n');
   const html = [];
   let paragraph = [];
   let listItems = [];
 
   function flushParagraph() {
     if (!paragraph.length) return;
-    const value = renderInline(paragraph.join('\n')).replace(/\n/g, '<br>');
+    const value = renderInline(paragraph.join('\n')).replace(new RegExp('\\n', 'g'), '<br>');
     html.push('<p>' + value + '</p>');
     paragraph = [];
   }
@@ -59,14 +59,14 @@ export function renderMarkdownBlocks(raw) {
       continue;
     }
 
-    const listMatch = line.match(/^\s*[-*]\s+(.*)$/);
+    const listMatch = line.match(new RegExp('^\\s*[-*]\\s+(.*)$'));
     if (listMatch) {
       flushParagraph();
       listItems.push(listMatch[1]);
       continue;
     }
 
-    const headingMatch = line.match(/^(#{1,3})\s+(.*)$/);
+    const headingMatch = line.match(new RegExp('^(#{1,3})\\s+(.*)$'));
     if (headingMatch) {
       flushParagraph();
       flushList();
@@ -90,7 +90,7 @@ export function renderMarkdown(raw) {
   if (!text) return '';
 
   const chunks = [];
-  const pattern = /```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g;
+  const pattern = new RegExp('```([a-zA-Z0-9_-]+)?\\n([\\s\\S]*?)```', 'g');
   let cursor = 0;
   let match;
   while ((match = pattern.exec(text)) !== null) {

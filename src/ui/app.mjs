@@ -187,8 +187,8 @@ export function getHtml() {
       if (!value) {
         value = window.location.origin + '/v1';
       }
-      value = value.replace(/\\/+$, '');
-      if (!/^https?:\\/\\//i.test(value)) {
+      value = value.replace(new RegExp('/+$'), '');
+      if (!new RegExp('^https?://', 'i').test(value)) {
         throw new Error('API Base URL must start with http:// or https://');
       }
       return value;
