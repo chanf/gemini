@@ -90,8 +90,10 @@ export function renderModelList(state, elements) {
       elements.modelInput.value = action.dataset.model;
       localStorage.setItem('gemini.ui.model', action.dataset.model);
       renderModelList(state, elements);
-      const { setStatus } = require('./errors.mjs');
-      setStatus(elements, 'Model selected: ' + action.dataset.model, 'ok');
+      // setStatus will be available in global scope when inlined
+      if (typeof setStatus === 'function') {
+        setStatus(elements, 'Model selected: ' + action.dataset.model, 'ok');
+      }
     });
 
     row.appendChild(name);
@@ -109,8 +111,9 @@ export function updateModelStatus(state, elements, modelId, status) {
 export async function checkSingleModel(state, elements, modelId, config) {
   updateModelStatus(state, elements, modelId, 'checking');
   try {
-    // Remove trailing /chat/completions from apiBase if present, then add /chat/completions
-    const apiBase = config.apiBase.replace(new RegExp('/chat/completions$'), '');
+    // Remove trailing /models or /chat/completions from apiBase if present
+    let apiBase = config.apiBase.replace(new RegExp('/models$'), '');
+    apiBase = apiBase.replace(new RegExp('/chat/completions$'), '');
     const response = await fetch(apiBase + '/chat/completions', {
       method: 'POST',
       headers: {

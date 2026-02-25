@@ -105,8 +105,9 @@ export async function sendMessage(state, elements, config) {
   setSendingState(elements, true);
 
   try {
-    // Remove trailing /chat/completions from apiBase if present, then add /chat/completions
-    const apiBase = config.apiBase.replace(new RegExp('/chat/completions$'), '');
+    // Remove trailing /models or /chat/completions from apiBase if present
+    let apiBase = config.apiBase.replace(new RegExp('/models$'), '');
+    apiBase = apiBase.replace(new RegExp('/chat/completions$'), '');
     const response = await fetch(apiBase + '/chat/completions', {
       method: 'POST',
       headers: {
