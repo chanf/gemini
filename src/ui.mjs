@@ -322,6 +322,29 @@ const UI_HTML = `<!doctype html>
       animation: msg-pop 180ms ease-out;
     }
 
+    .msg-error {
+      border: 1px solid rgba(143, 42, 16, 0.3);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: rgba(143, 42, 16, 0.08);
+      color: #8f2a10;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      animation: msg-pop 180ms ease-out;
+    }
+
+    .msg-error-title {
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .msg-error-content {
+      font-family: "IBM Plex Mono", "Consolas", "Monaco", monospace;
+      font-size: 0.82rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
     @keyframes msg-pop {
       from {
         opacity: 0;
@@ -789,6 +812,41 @@ const UI_HTML = `<!doctype html>
       return chunks.join('');
     }
 
+    function parseApiError(errorText) {
+      try {
+        var json = JSON.parse(errorText);
+        if (json.error) {
+          var err = json.error;
+          if (err.code === 429) {
+            var match = err.message.match(/Please retry in ([\d.]+)s/);
+            var retrySeconds = match ? Math.ceil(parseFloat(match[1])) : null;
+            return {
+              type: 'quota',
+              title: '配额限制 (Quota Limit)',
+              message: retrySeconds
+                ? '免费配额已用完，请在 ' + retrySeconds + ' 秒后重试，或更换其他模型（如 gemini-1.5-flash）'
+                : '免费配额已用完，请稍后重试或更换其他模型',
+              details: err.message
+            };
+          }
+          return {
+            type: 'api',
+            title: 'API 错误 (Error ' + err.code + ')',
+            message: err.message.split('\\n')[0],
+            details: err.message
+          };
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+      return {
+        type: 'unknown',
+        title: '请求失败',
+        message: errorText.slice(0, 200),
+        details: errorText
+      };
+    }
+
     function renderHistory() {
       elements.history.innerHTML = '';
       if (!state.messages.length) {
@@ -802,6 +860,20 @@ const UI_HTML = `<!doctype html>
 
       for (var i = 0; i < state.messages.length; i += 1) {
         var item = state.messages[i];
+
+        // Render error message if present
+        if (item.error) {
+          var errorDiv = document.createElement('div');
+          errorDiv.className = 'msg-error';
+          var parsedError = parseApiError(item.error);
+          errorDiv.innerHTML = '<div class="msg-error-title">' + escapeHtml(parsedError.title) + '</div>' +
+            '<div>' + escapeHtml(parsedError.message) + '</div>' +
+            '<details style="margin-top: 8px;"><summary style="cursor: pointer; font-size: 0.85rem; opacity: 0.8;">查看详情</summary>' +
+            '<pre class="msg-error-content" style="margin-top: 6px;">' + escapeHtml(parsedError.details) + '</pre></details>';
+          elements.history.appendChild(errorDiv);
+          continue;
+        }
+
         var article = document.createElement('article');
         article.className = 'msg ' + item.role;
 
@@ -903,28 +975,32 @@ const UI_HTML = `<!doctype html>
     async function loadModels() {
       var config = ensureApiConfig();
       setStatus('Loading models...', '');
-      var response = await fetch(config.apiBase + '/models', {
-        method: 'GET',
-        headers: {
-          Authorization: 'Bearer ' + config.apiKey
+      try {
+        var response = await fetch(config.apiBase + '/models', {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer ' + config.apiKey
+          }
+        });
+        var responseText = await response.text();
+        if (!response.ok) {
+          throw new Error('Load models failed: ' + response.status + ' ' + responseText);
         }
-      });
-      var responseText = await response.text();
-      if (!response.ok) {
-        throw new Error('Load models failed: ' + response.status + ' ' + responseText);
-      }
 
-      var payload = safeJsonParse(responseText, {});
-      var models = Array.isArray(payload.data)
-        ? payload.data.map(function (item) { return item.id; }).filter(Boolean)
-        : [];
-      models.sort();
-      state.models = models;
-      if (!elements.modelInput.value && models.length) {
-        elements.modelInput.value = models[0];
+        var payload = safeJsonParse(responseText, {});
+        var models = Array.isArray(payload.data)
+          ? payload.data.map(function (item) { return item.id; }).filter(Boolean)
+          : [];
+        models.sort();
+        state.models = models;
+        if (!elements.modelInput.value && models.length) {
+          elements.modelInput.value = models[0];
+        }
+        renderModelList();
+        setStatus('Loaded ' + models.length + ' models', 'ok');
+      } catch (error) {
+        setStatus('Failed to load models', 'error');
       }
-      renderModelList();
-      setStatus('Loaded ' + models.length + ' models', 'ok');
     }
 
     function normalizeMessages(messages) {
@@ -1033,7 +1109,12 @@ const UI_HTML = `<!doctype html>
 
         if (!response.ok) {
           var text = await response.text();
-          throw new Error('Chat request failed: ' + response.status + ' ' + text);
+          assistantMessage.error = text;
+          assistantMessage.content = '';
+          persistMessages();
+          renderHistory();
+          setStatus('Request failed', 'error');
+          return;
         }
 
         if (useStream && response.body) {
@@ -1058,18 +1139,20 @@ const UI_HTML = `<!doctype html>
       } catch (error) {
         if (error && error.name === 'AbortError') {
           setStatus('Generation stopped by user', 'error');
-          if (!assistantMessage.content) {
+          if (!assistantMessage.content && !assistantMessage.error) {
             assistantMessage.content = '(Generation stopped)';
           }
           persistMessages();
           renderHistory();
           return;
         }
-        state.messages.pop();
-        state.messages.pop();
+        // Other errors: network errors, stream parsing errors, etc.
+        if (!assistantMessage.content && !assistantMessage.error) {
+          assistantMessage.error = error.message || String(error);
+        }
         persistMessages();
         renderHistory();
-        throw error;
+        setStatus('Request failed', 'error');
       } finally {
         state.abortController = null;
         setSendingState(false);
