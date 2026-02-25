@@ -1,7 +1,8 @@
 import { STYLES } from './styles.mjs';
-import { setStatus, parseApiError } from './errors.mjs';
-import { loadModels, renderModelList, checkAllModels, getActiveModel } from './models.mjs';
-import { renderHistory, persistMessages, updateMessageCount, setSendingState, sendMessage, LOCAL_KEYS, SESSION_KEYS } from './chat.mjs';
+import { escapeHtml, safeJsonParse, renderInline, renderMarkdownBlocks, renderMarkdown } from './markdown.mjs';
+import { parseApiError, renderError, setStatus } from './errors.mjs';
+import { loadModels, renderModelList, updateModelStatus, checkSingleModel, checkAllModels, getActiveModel } from './models.mjs';
+import { persistMessages, updateMessageCount, renderHistory, normalizeMessages, setSendingState, sendMessage, readSseStream, LOCAL_KEYS, SESSION_KEYS } from './chat.mjs';
 
 // Generate HTML
 export function getHtml() {
@@ -106,7 +107,46 @@ export function getHtml() {
   <script>
     'use strict';
 
-    // State
+    // ========== Markdown Utilities ==========
+    ${escapeHtml.toString()}
+    ${safeJsonParse.toString()}
+    ${renderInline.toString()}
+    ${renderMarkdownBlocks.toString()}
+    ${renderMarkdown.toString()}
+
+    // ========== Error Handling ==========
+    ${parseApiError.toString()}
+    ${renderError.toString()}
+    ${setStatus.toString()}
+
+    // ========== Model Management ==========
+    ${loadModels.toString()}
+    ${renderModelList.toString()}
+    ${updateModelStatus.toString()}
+    ${checkSingleModel.toString()}
+    ${checkAllModels.toString()}
+    ${getActiveModel.toString()}
+
+    // ========== Chat Functions ==========
+    ${persistMessages.toString()}
+    ${updateMessageCount.toString()}
+    ${renderHistory.toString()}
+    ${normalizeMessages.toString()}
+    ${setSendingState.toString()}
+    ${sendMessage.toString()}
+    ${readSseStream.toString()}
+
+    // ========== Constants ==========
+    const LOCAL_KEYS = {
+      apiBase: 'gemini.ui.apiBase',
+      apiKey: 'gemini.ui.apiKey',
+      model: 'gemini.ui.model'
+    };
+    const SESSION_KEYS = {
+      messages: 'gemini.ui.messages'
+    };
+
+    // ========== State ==========
     const state = {
       models: [],
       messages: [],
@@ -116,7 +156,7 @@ export function getHtml() {
       promptText: null
     };
 
-    // Elements
+    // ========== Elements ==========
     const elements = {
       status: document.getElementById('status'),
       apiBase: document.getElementById('apiBase'),
@@ -140,7 +180,7 @@ export function getHtml() {
       sendButton: document.getElementById('sendButton')
     };
 
-    // Utility functions
+    // ========== Utility Functions ==========
     function normalizeApiBase(rawValue) {
       let value = String(rawValue || '').trim();
       if (!value) {
@@ -178,7 +218,6 @@ export function getHtml() {
     }
 
     function restoreState() {
-      const { safeJsonParse } = window.uiModules || {};
       const storedBase = localStorage.getItem(LOCAL_KEYS.apiBase);
       const storedKey = localStorage.getItem(LOCAL_KEYS.apiKey);
       const storedModel = localStorage.getItem(LOCAL_KEYS.model);
@@ -187,12 +226,14 @@ export function getHtml() {
       elements.apiBase.value = storedBase || (window.location.origin + '/v1');
       elements.apiKey.value = storedKey || '';
       elements.modelInput.value = storedModel || '';
-      state.messages = Array.isArray(safeJsonParse?.(storedMessages, [])) ? safeJsonParse(storedMessages, []) : [];
+      state.messages = Array.isArray(safeJsonParse(storedMessages, []))
+        ? safeJsonParse(storedMessages, [])
+        : [];
       renderHistory(elements, state);
       renderModelList(state, elements);
     }
 
-    // Event listeners
+    // ========== Event Listeners ==========
     elements.saveBase.addEventListener('click', () => {
       try {
         const normalized = normalizeApiBase(elements.apiBase.value);
@@ -272,7 +313,7 @@ export function getHtml() {
       setStatus(elements, 'Session history cleared', 'ok');
     });
 
-    // Initialize
+    // ========== Initialize ==========
     restoreState();
     setStatus(elements, 'Ready', '');
   </script>

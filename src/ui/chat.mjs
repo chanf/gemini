@@ -213,4 +213,4 @@ async function readSseStream(stream, onDelta) {
   }
 }
 
-export { LOCAL_KEYS, SESSION_KEYS };
+export { readSseStream, LOCAL_KEYS, SESSION_KEYS };
