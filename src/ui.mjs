@@ -290,6 +290,63 @@ const UI_HTML = `<!doctype html>
       box-shadow: none;
     }
 
+    .model-status {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.7rem;
+      padding: 3px 6px;
+      border-radius: 6px;
+    }
+
+    .model-status.unknown {
+      background: rgba(95, 106, 130, 0.15);
+      color: var(--muted);
+    }
+
+    .model-status.checking {
+      background: rgba(245, 111, 70, 0.15);
+      color: #c44d26;
+    }
+
+    .model-status.available {
+      background: rgba(13, 119, 69, 0.15);
+      color: #0d7745;
+    }
+
+    .model-status.unavailable {
+      background: rgba(143, 42, 16, 0.15);
+      color: #8f2a10;
+    }
+
+    .model-status-icon {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .model-status.unknown .model-status-icon {
+      background: var(--muted);
+    }
+
+    .model-status.checking .model-status-icon {
+      background: #f56f46;
+      animation: pulse 1s infinite;
+    }
+
+    .model-status.available .model-status-icon {
+      background: #0d7745;
+    }
+
+    .model-status.unavailable .model-status-icon {
+      background: #8f2a10;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
     .chat {
       display: grid;
       grid-template-rows: 1fr auto;
@@ -581,6 +638,7 @@ const UI_HTML = `<!doctype html>
         <h2 class="section-title">Models</h2>
         <div class="row">
           <button id="loadModels" type="button">Load Models</button>
+          <button id="checkModels" type="button" class="button-ghost" disabled>Check Availability</button>
         </div>
 
         <div class="field">
@@ -642,7 +700,8 @@ const UI_HTML = `<!doctype html>
       models: [],
       messages: [],
       isSending: false,
-      abortController: null
+      abortController: null,
+      modelStatus: {}
     };
 
     var elements = {
@@ -653,6 +712,7 @@ const UI_HTML = `<!doctype html>
       saveApiKey: document.getElementById('saveApiKey'),
       clearApiKey: document.getElementById('clearApiKey'),
       loadModels: document.getElementById('loadModels'),
+      checkModels: document.getElementById('checkModels'),
       modelFilter: document.getElementById('modelFilter'),
       modelList: document.getElementById('modelList'),
       modelInput: document.getElementById('modelInput'),
@@ -953,6 +1013,13 @@ const UI_HTML = `<!doctype html>
         name.className = 'model-name';
         name.textContent = id;
 
+        // Add status indicator
+        var status = state.modelStatus && state.modelStatus[id] ? state.modelStatus[id] : 'unknown';
+        var statusDiv = document.createElement('div');
+        statusDiv.className = 'model-status ' + status;
+        statusDiv.innerHTML = '<div class="model-status-icon"></div>' +
+          (status === 'available' ? '可用' : status === 'unavailable' ? '限制' : status === 'checking' ? '检查中' : '');
+
         var action = document.createElement('button');
         action.type = 'button';
         action.className = 'model-pick button-ghost';
@@ -967,9 +1034,81 @@ const UI_HTML = `<!doctype html>
         });
 
         row.appendChild(name);
+        row.appendChild(statusDiv);
         row.appendChild(action);
         elements.modelList.appendChild(row);
       }
+    }
+
+    // Store model availability status
+    state.modelStatus = state.modelStatus || {};
+
+    function updateModelStatus(modelId, status) {
+      state.modelStatus[modelId] = status;
+      renderModelList();
+    }
+
+    async function checkSingleModel(modelId, config) {
+      updateModelStatus(modelId, 'checking');
+      try {
+        var response = await fetch(config.apiBase + '/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + config.apiKey
+          },
+          body: JSON.stringify({
+            model: modelId,
+            messages: [{ role: 'user', content: 'Hi' }],
+            stream: false,
+            max_tokens: 10
+          })
+        });
+
+        if (response.ok) {
+          updateModelStatus(modelId, 'available');
+        } else {
+          var text = await response.text();
+          // Only mark as unavailable if it's a quota/model error, not other errors
+          if (text.includes('429') || text.includes('quota') || text.includes('model not found')) {
+            updateModelStatus(modelId, 'unavailable');
+          } else {
+            updateModelStatus(modelId, 'unknown');
+          }
+        }
+      } catch (error) {
+        updateModelStatus(modelId, 'unknown');
+      }
+    }
+
+    async function checkAllModels() {
+      var config = ensureApiConfig();
+      if (!state.models.length) {
+        setStatus('Load models first', 'error');
+        return;
+      }
+
+      setStatus('Checking model availability...', '');
+      elements.checkModels.disabled = true;
+      elements.loadModels.disabled = true;
+
+      // Check models in batches to avoid overwhelming the API
+      var batchSize = 3;
+      for (var i = 0; i < state.models.length; i += batchSize) {
+        var batch = state.models.slice(i, i + batchSize);
+        await Promise.all(batch.map(function (modelId) {
+          return checkSingleModel(modelId, config);
+        }));
+        // Small delay between batches
+        await new Promise(function (resolve) { return setTimeout(resolve, 200); });
+      }
+
+      elements.checkModels.disabled = false;
+      elements.loadModels.disabled = false;
+
+      var availableCount = Object.values(state.modelStatus).filter(function (s) { return s === 'available'; }).length;
+      var unavailableCount = Object.values(state.modelStatus).filter(function (s) { return s === 'unavailable'; }).length;
+      setStatus('Checked: ' + availableCount + ' available, 'unavailable: ' + unavailableCount, availableCount > 0 ? 'ok' : 'error');
     }
 
     async function loadModels() {
@@ -993,10 +1132,12 @@ const UI_HTML = `<!doctype html>
           : [];
         models.sort();
         state.models = models;
+        state.modelStatus = {}; // Reset status when loading new models
         if (!elements.modelInput.value && models.length) {
           elements.modelInput.value = models[0];
         }
         renderModelList();
+        elements.checkModels.disabled = false;
         setStatus('Loaded ' + models.length + ' models', 'ok');
       } catch (error) {
         setStatus('Failed to load models', 'error');
@@ -1202,6 +1343,12 @@ const UI_HTML = `<!doctype html>
 
     elements.loadModels.addEventListener('click', function () {
       loadModels().catch(function (error) {
+        setStatus(error.message, 'error');
+      });
+    });
+
+    elements.checkModels.addEventListener('click', function () {
+      checkAllModels().catch(function (error) {
         setStatus(error.message, 'error');
       });
     });
