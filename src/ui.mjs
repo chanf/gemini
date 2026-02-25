@@ -113,6 +113,7 @@ const UI_HTML = `<!doctype html>
       grid-template-columns: 360px minmax(0, 1fr);
       gap: 16px;
       align-items: start;
+      max-height: calc(100vh - 100px);
     }
 
     .card {
@@ -128,6 +129,8 @@ const UI_HTML = `<!doctype html>
       display: grid;
       gap: 14px;
       animation: rise-in 460ms ease-out;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
     }
 
     .section-title {
@@ -266,17 +269,19 @@ const UI_HTML = `<!doctype html>
 
     .chat {
       display: grid;
-      grid-template-rows: minmax(420px, 63vh) auto;
+      grid-template-rows: 1fr auto;
+      max-height: calc(100vh - 100px);
       animation: rise-in 520ms ease-out;
     }
 
     .history {
-      overflow: auto;
+      overflow-y: auto;
       padding: 16px;
       display: grid;
       gap: 12px;
       border-bottom: 1px solid rgba(11, 21, 51, 0.11);
       scroll-behavior: smooth;
+      min-height: 0;
     }
 
     .empty {
@@ -425,16 +430,36 @@ const UI_HTML = `<!doctype html>
     @media (max-width: 1080px) {
       .layout {
         grid-template-columns: 1fr;
+        max-height: none;
+      }
+
+      .panel {
+        max-height: none;
+        overflow-y: visible;
       }
 
       .chat {
         grid-template-rows: minmax(360px, 58vh) auto;
+        max-height: none;
       }
     }
 
     @media (max-width: 640px) {
       .app {
         padding: 16px 12px 16px;
+      }
+
+      .layout {
+        max-height: none;
+      }
+
+      .panel {
+        max-height: none;
+        overflow-y: visible;
+      }
+
+      .chat {
+        max-height: none;
       }
 
       .composer-top {
