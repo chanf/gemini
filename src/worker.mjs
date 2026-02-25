@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { handleUiRequest } from "./ui.mjs";
+import { handleUiRequest } from "./ui/app.mjs";
 
 export default {
   async fetch (request) {

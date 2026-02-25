@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { handleUiRequest } from "../src/ui.mjs";
+import { handleUiRequest } from "../src/ui/app.mjs";
 
 test("handleUiRequest returns html for /ui paths", async () => {
   const response = handleUiRequest("/ui");
