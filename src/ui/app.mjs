@@ -1,8 +1,4 @@
 import { STYLES } from './styles.mjs';
-import { escapeHtml, safeJsonParse, renderInline, renderMarkdownBlocks, renderMarkdown } from './markdown.mjs';
-import { parseApiError, renderError, setStatus } from './errors.mjs';
-import { loadModels, renderModelList, updateModelStatus, checkSingleModel, checkAllModels, getActiveModel } from './models.mjs';
-import { persistMessages, updateMessageCount, renderHistory, normalizeMessages, setSendingState, sendMessage, readSseStream, LOCAL_KEYS, SESSION_KEYS } from './chat.mjs';
 
 // Generate HTML
 export function getHtml() {
@@ -115,36 +111,7 @@ export function getHtml() {
   <script>
     'use strict';
 
-    // ========== Markdown Utilities ==========
-    ${escapeHtml.toString()}
-    ${safeJsonParse.toString()}
-    ${renderInline.toString()}
-    ${renderMarkdownBlocks.toString()}
-    ${renderMarkdown.toString()}
-
-    // ========== Error Handling ==========
-    ${parseApiError.toString()}
-    ${renderError.toString()}
-    ${setStatus.toString()}
-
-    // ========== Model Management ==========
-    ${loadModels.toString()}
-    ${renderModelList.toString()}
-    ${updateModelStatus.toString()}
-    ${checkSingleModel.toString()}
-    ${checkAllModels.toString()}
-    ${getActiveModel.toString()}
-
-    // ========== Chat Functions ==========
-    ${persistMessages.toString()}
-    ${updateMessageCount.toString()}
-    ${renderHistory.toString()}
-    ${normalizeMessages.toString()}
-    ${setSendingState.toString()}
-    ${sendMessage.toString()}
-    ${readSseStream.toString()}
-
-    // ========== Constants ==========
+    // ========== Storage Keys ==========
     const LOCAL_KEYS = {
       apiBase: 'gemini.ui.apiBase',
       apiKey: 'gemini.ui.apiKey',
@@ -153,6 +120,530 @@ export function getHtml() {
     const SESSION_KEYS = {
       messages: 'gemini.ui.messages'
     };
+
+    // ========== Utility Functions ==========
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function safeJsonParse(input, fallback) {
+      try {
+        return JSON.parse(input);
+      } catch (error) {
+        return fallback;
+      }
+    }
+
+    function renderInline(raw) {
+      const text = escapeHtml(raw);
+      return text
+        .replace(/\\[([^\\]]+)\\]\\((https?:[^\\s)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+        .replace(/\`([^\`]+)\`/g, '<code>$1</code>')
+        .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+        .replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+    }
+
+    function renderMarkdownBlocks(raw) {
+      const lines = String(raw).replace(/\\r/g, '').split('\\n');
+      const html = [];
+      let paragraph = [];
+      let listItems = [];
+
+      function flushParagraph() {
+        if (!paragraph.length) return;
+        const value = renderInline(paragraph.join('\\n')).replace(/\\n/g, '<br>');
+        html.push('<p>' + value + '</p>');
+        paragraph = [];
+      }
+
+      function flushList() {
+        if (!listItems.length) return;
+        html.push('<ul>');
+        for (let index = 0; index < listItems.length; index += 1) {
+          html.push('<li>' + renderInline(listItems[index]) + '</li>');
+        }
+        html.push('</ul>');
+        listItems = [];
+      }
+
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        if (!line.trim()) {
+          flushParagraph();
+          flushList();
+          continue;
+        }
+
+        const listMatch = line.match(/^\\s*[-*]\\s+(.*)$/);
+        if (listMatch) {
+          flushParagraph();
+          listItems.push(listMatch[1]);
+          continue;
+        }
+
+        const headingMatch = line.match(/^(#{1,3})\\s+(.*)$/);
+        if (headingMatch) {
+          flushParagraph();
+          flushList();
+          const level = headingMatch[1].length;
+          html.push('<h' + level + '>' + renderInline(headingMatch[2]) + '</h' + level + '>');
+          continue;
+        }
+
+        flushList();
+        paragraph.push(line);
+      }
+
+      flushParagraph();
+      flushList();
+      return html.join('');
+    }
+
+    function renderMarkdown(raw) {
+      const text = String(raw || '');
+      if (!text) return '';
+
+      const chunks = [];
+      const pattern = /\\\`\`\`([a-zA-Z0-9_-]+)?\\n([\\s\\S]*?)\\\`\`\`/g;
+      let cursor = 0;
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        if (match.index > cursor) {
+          chunks.push(renderMarkdownBlocks(text.slice(cursor, match.index)));
+        }
+        const languageAttr = match[1] ? ' data-lang="' + escapeHtml(match[1]) + '"' : '';
+        chunks.push('<pre><code' + languageAttr + '>' + escapeHtml(match[2]) + '</code></pre>');
+        cursor = pattern.lastIndex;
+      }
+      if (cursor < text.length) {
+        chunks.push(renderMarkdownBlocks(text.slice(cursor)));
+      }
+      return chunks.join('');
+    }
+
+    function parseApiError(errorText) {
+      try {
+        const json = JSON.parse(errorText);
+        if (json.error) {
+          const err = json.error;
+          if (err.code === 429) {
+            const match = err.message.match(/Please retry in ([\\d.]+)s/);
+            const retrySeconds = match ? Math.ceil(parseFloat(match[1])) : null;
+            return {
+              type: 'quota',
+              title: '配额限制 (Quota Limit)',
+              message: retrySeconds
+                ? '免费配额已用完，请在 ' + retrySeconds + ' 秒后重试，或更换其他模型（如 gemini-1.5-flash）'
+                : '免费配额已用完，请稍后重试或更换其他模型',
+              details: err.message
+            };
+          }
+          return {
+            type: 'api',
+            title: 'API 错误 (Error ' + err.code + ')',
+            message: err.message.split('\\n')[0],
+            details: err.message
+          };
+        }
+      } catch (e) {}
+      return {
+        type: 'unknown',
+        title: '请求失败',
+        message: errorText.slice(0, 200),
+        details: errorText
+      };
+    }
+
+    function renderError(errorText) {
+      const parsedError = parseApiError(errorText);
+      return '<div class="msg-error-title">' + escapeHtml(parsedError.title) + '</div>' +
+        '<div>' + escapeHtml(parsedError.message) + '</div>' +
+        '<details style="margin-top: 8px;">' +
+          '<summary style="cursor: pointer; font-size: 0.85rem; opacity: 0.8;">查看详情</summary>' +
+          '<pre class="msg-error-content" style="margin-top: 6px;">' + escapeHtml(parsedError.details) + '</pre>' +
+        '</details>';
+    }
+
+    function setStatus(elements, message, type) {
+      elements.status.textContent = message;
+      elements.status.classList.remove('ok', 'error');
+      if (type === 'ok') {
+        elements.status.classList.add('ok');
+      } else if (type === 'error') {
+        elements.status.classList.add('error');
+      }
+    }
+
+    function persistMessages(messages) {
+      sessionStorage.setItem(SESSION_KEYS.messages, JSON.stringify(messages));
+    }
+
+    function updateMessageCount(elements, messages) {
+      elements.messageCount.textContent = 'Messages: ' + messages.length;
+    }
+
+    function renderHistory(elements, state) {
+      elements.history.innerHTML = '';
+      if (!state.messages.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty';
+        empty.textContent = 'No messages in this session yet. Start with model list fetch and send a prompt.';
+        elements.history.appendChild(empty);
+        updateMessageCount(elements, state.messages);
+        return;
+      }
+
+      for (let i = 0; i < state.messages.length; i += 1) {
+        const item = state.messages[i];
+
+        if (item.error) {
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'msg-error';
+          errorDiv.innerHTML = renderError(item.error);
+          elements.history.appendChild(errorDiv);
+          continue;
+        }
+
+        const article = document.createElement('article');
+        article.className = 'msg ' + item.role;
+
+        const role = document.createElement('div');
+        role.className = 'msg-role';
+        if (item.role === 'assistant') {
+          const modelText = item.model ? ' (' + item.model + ')' : '';
+          role.textContent = 'Assistant' + modelText;
+        } else {
+          role.textContent = 'User';
+        }
+
+        const bubble = document.createElement('div');
+        bubble.className = 'msg-bubble';
+        bubble.innerHTML = renderMarkdown(item.content || '');
+
+        article.appendChild(role);
+        article.appendChild(bubble);
+        elements.history.appendChild(article);
+      }
+
+      updateMessageCount(elements, state.messages);
+      elements.history.scrollTop = elements.history.scrollHeight;
+    }
+
+    function normalizeMessages(messages) {
+      return messages.map(function(item) {
+        return { role: item.role, content: item.content };
+      });
+    }
+
+    function setSendingState(elements, isSending) {
+      elements.sendButton.disabled = isSending;
+      elements.stopButton.disabled = !isSending;
+      elements.prompt.disabled = isSending;
+      elements.loadModels.disabled = isSending;
+      elements.clearHistory.disabled = isSending;
+    }
+
+    function readSseStream(stream, onDelta) {
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      function consumeEvent(rawEvent) {
+        if (!rawEvent.trim()) return;
+        const lines = rawEvent.split(/\\r?\\n/);
+        for (let index = 0; index < lines.length; index += 1) {
+          const line = lines[index];
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          if (payload === '[DONE]') return 'done';
+          const data = safeJsonParse(payload, null);
+          if (!data || !Array.isArray(data.choices) || !data.choices[0]) continue;
+          const delta = data.choices[0].delta;
+          if (delta && typeof delta.content === 'string') {
+            onDelta(delta.content);
+          }
+        }
+        return '';
+      }
+
+      return new Promise(function(resolve) {
+        function pump() {
+          reader.read().then(function(result) {
+            if (result.done) {
+              if (buffer) consumeEvent(buffer);
+              resolve();
+              return;
+            }
+            buffer += decoder.decode(result.value, { stream: true });
+            const events = buffer.split(/\\r?\\n\\r?\\n/);
+            buffer = events.pop() || '';
+            for (let i = 0; i < events.length; i += 1) {
+              if (consumeEvent(events[i]) === 'done') {
+                resolve();
+                return;
+              }
+            }
+            pump();
+          });
+        }
+        pump();
+      });
+    }
+
+    function sendMessage(state, elements, config) {
+      const useStream = elements.streamToggle.checked;
+      const model = elements.modelInput.value.trim() || 'gemini-flash-latest';
+
+      const userMessage = { role: 'user', content: state.promptText };
+      const assistantMessage = { role: 'assistant', content: '', model: model };
+      state.messages.push(userMessage);
+      state.messages.push(assistantMessage);
+      persistMessages(state.messages);
+      renderHistory(elements, state);
+
+      const requestMessages = normalizeMessages(state.messages.slice(0, -1));
+
+      state.abortController = new AbortController();
+      setSendingState(elements, true);
+
+      let apiBase = config.apiBase.replace(/\/models$/, '');
+      apiBase = apiBase.replace(/\/chat\/completions$/, '');
+
+      return fetch(apiBase + '/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + config.apiKey
+        },
+        body: JSON.stringify({
+          model: model,
+          stream: useStream,
+          stream_options: useStream ? { include_usage: true } : undefined,
+          messages: requestMessages
+        }),
+        signal: state.abortController.signal
+      }).then(function(response) {
+        if (!response.ok) {
+          return response.text().then(function(text) {
+            assistantMessage.error = text;
+            assistantMessage.content = '';
+            persistMessages(state.messages);
+            renderHistory(elements, state);
+            throw new Error('Request failed');
+          });
+        }
+
+        if (useStream && response.body) {
+          return readSseStream(response.body, function(deltaText) {
+            assistantMessage.content += deltaText;
+            persistMessages(state.messages);
+            renderHistory(elements, state);
+          });
+        } else {
+          return response.text().then(function(body) {
+            const json = safeJsonParse(body, {});
+            const choice = json.choices && json.choices[0];
+            const content = choice && choice.message && typeof choice.message.content === 'string'
+              ? choice.message.content
+              : '';
+            assistantMessage.content = content || '(No text content in response)';
+            persistMessages(state.messages);
+            renderHistory(elements, state);
+          });
+        }
+      }).then(function() {
+        return true;
+      }).catch(function(error) {
+        if (error && error.name === 'AbortError') {
+          if (!assistantMessage.content && !assistantMessage.error) {
+            assistantMessage.content = '(Generation stopped)';
+          }
+          persistMessages(state.messages);
+          renderHistory(elements, state);
+          throw error;
+        }
+        if (!assistantMessage.content && !assistantMessage.error) {
+          assistantMessage.error = error.message || String(error);
+        }
+        persistMessages(state.messages);
+        renderHistory(elements, state);
+        throw error;
+      }).finally(function() {
+        state.abortController = null;
+        setSendingState(elements, false);
+      });
+    }
+
+    function loadModels(state, elements, config) {
+      let apiBase = config.apiBase.replace(/\/models$/, '');
+      return fetch(apiBase + '/models', {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer ' + config.apiKey
+        }
+      }).then(function(response) {
+        return response.text();
+      }).then(function(responseText) {
+        const payload = safeJsonParse(responseText, {});
+        const models = Array.isArray(payload.data)
+          ? payload.data.map(function(item) { return item.id; }).filter(Boolean)
+          : [];
+        models.sort();
+        state.models = models;
+        state.modelStatus = {};
+        if (!elements.modelInput.value && models.length) {
+          elements.modelInput.value = models[0];
+        }
+        renderModelList(state, elements);
+        elements.checkModels.disabled = false;
+        return models.length;
+      });
+    }
+
+    function renderModelList(state, elements) {
+      const filter = String(elements.modelFilter.value || '').toLowerCase().trim();
+      const availableOnly = elements.availableOnly && elements.availableOnly.checked;
+      elements.modelList.innerHTML = '';
+
+      const models = state.models.filter(function(id) {
+        if (filter && id.toLowerCase().indexOf(filter) < 0) {
+          return false;
+        }
+        if (availableOnly) {
+          const status = state.modelStatus && state.modelStatus[id] ? state.modelStatus[id] : 'unknown';
+          return status === 'available';
+        }
+        return true;
+      });
+
+      if (!models.length) {
+        const empty = document.createElement('p');
+        empty.className = 'hint';
+        if (state.models.length) {
+          if (availableOnly) {
+            empty.textContent = 'No available models. Click "Check Availability" first.';
+          } else {
+            empty.textContent = 'No model matched current filter.';
+          }
+        } else {
+          empty.textContent = 'Load models to display available model IDs.';
+        }
+        elements.modelList.appendChild(empty);
+        return;
+      }
+
+      const activeModel = String(elements.modelInput.value || '').trim();
+      for (let i = 0; i < models.length; i += 1) {
+        const id = models[i];
+        const row = document.createElement('div');
+        row.className = 'model-row' + (id === activeModel ? ' active' : '');
+
+        const name = document.createElement('div');
+        name.className = 'model-name';
+        name.textContent = id;
+
+        const status = state.modelStatus && state.modelStatus[id] ? state.modelStatus[id] : 'unknown';
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'model-status ' + status;
+        statusDiv.innerHTML = '<div class="model-status-icon"></div>' +
+          (status === 'available' ? '可用' : status === 'unavailable' ? '限制' : status === 'checking' ? '检查中' : '');
+
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'model-pick button-ghost';
+        action.textContent = 'Use';
+        action.dataset.model = id;
+        action.addEventListener('click', function() {
+          elements.modelInput.value = action.dataset.model;
+          localStorage.setItem(LOCAL_KEYS.model, action.dataset.model);
+          renderModelList(state, elements);
+          setStatus(elements, 'Model selected: ' + action.dataset.model, 'ok');
+        });
+
+        row.appendChild(name);
+        row.appendChild(statusDiv);
+        row.appendChild(action);
+        elements.modelList.appendChild(row);
+      }
+    }
+
+    function updateModelStatus(state, elements, modelId, status) {
+      state.modelStatus[modelId] = status;
+      renderModelList(state, elements);
+    }
+
+    function checkSingleModel(state, elements, modelId, config) {
+      updateModelStatus(state, elements, modelId, 'checking');
+      let apiBase = config.apiBase.replace(/\/models$/, '');
+      apiBase = apiBase.replace(/\/chat\/completions$/, '');
+
+      return fetch(apiBase + '/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + config.apiKey
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages: [{ role: 'user', content: 'Hi' }],
+          stream: false,
+          max_tokens: 10
+        })
+      }).then(function(response) {
+        if (response.ok) {
+          updateModelStatus(state, elements, modelId, 'available');
+        } else {
+          return response.text().then(function(text) {
+            if (text.indexOf('429') >= 0 || text.indexOf('quota') >= 0 || text.indexOf('model not found') >= 0) {
+              updateModelStatus(state, elements, modelId, 'unavailable');
+            } else {
+              updateModelStatus(state, elements, modelId, 'unknown');
+            }
+          });
+        }
+      }).catch(function() {
+        updateModelStatus(state, elements, modelId, 'unknown');
+      });
+    }
+
+    function checkAllModels(state, elements, config) {
+      if (!state.models.length) {
+        return Promise.reject(new Error('Load models first'));
+      }
+
+      elements.checkModels.disabled = true;
+      elements.loadModels.disabled = true;
+
+      const batchSize = 3;
+      const promises = [];
+
+      for (let i = 0; i < state.models.length; i += batchSize) {
+        const batch = state.models.slice(i, i + batchSize);
+        for (let j = 0; j < batch.length; j++) {
+          promises.push(checkSingleModel(state, elements, batch[j], config));
+        }
+        if (i + batchSize < state.models.length) {
+          promises.push(new Promise(function(resolve) {
+            setTimeout(resolve, 200);
+          }));
+        }
+      }
+
+      return Promise.all(promises).then(function() {
+        elements.checkModels.disabled = false;
+        elements.loadModels.disabled = false;
+
+        const availableCount = Object.values(state.modelStatus).filter(function(s) { return s === 'available'; }).length;
+        const unavailableCount = Object.values(state.modelStatus).filter(function(s) { return s === 'unavailable'; }).length;
+        return { availableCount: availableCount, unavailableCount: unavailableCount };
+      });
+    }
 
     // ========== State ==========
     const state = {
@@ -195,8 +686,8 @@ export function getHtml() {
       if (!value) {
         value = window.location.origin + '/v1';
       }
-      value = value.replace(new RegExp('/+$'), '');
-      if (!new RegExp('^https?://', 'i').test(value)) {
+      value = value.replace(/\/+$/, '');
+      if (!/^https?:\/\//i.test(value)) {
         throw new Error('API Base URL must start with http:// or https://');
       }
       return value;
@@ -212,7 +703,7 @@ export function getHtml() {
       if (!apiKey) {
         throw new Error('API Key is required');
       }
-      return { apiBase, apiKey };
+      return { apiBase: apiBase, apiKey: apiKey };
     }
 
     function saveModelSelection() {
@@ -243,7 +734,7 @@ export function getHtml() {
     }
 
     // ========== Event Listeners ==========
-    elements.saveBase.addEventListener('click', () => {
+    elements.saveBase.addEventListener('click', function() {
       try {
         const normalized = normalizeApiBase(elements.apiBase.value);
         localStorage.setItem(LOCAL_KEYS.apiBase, normalized);
@@ -254,7 +745,7 @@ export function getHtml() {
       }
     });
 
-    elements.saveApiKey.addEventListener('click', () => {
+    elements.saveApiKey.addEventListener('click', function() {
       const value = normalizeApiKey(elements.apiKey.value);
       if (!value) {
         setStatus(elements, 'API Key is empty, nothing saved', 'error');
@@ -264,32 +755,32 @@ export function getHtml() {
       setStatus(elements, 'API Key saved to localStorage', 'ok');
     });
 
-    elements.clearApiKey.addEventListener('click', () => {
+    elements.clearApiKey.addEventListener('click', function() {
       localStorage.removeItem(LOCAL_KEYS.apiKey);
       elements.apiKey.value = '';
       setStatus(elements, 'API Key removed', 'ok');
     });
 
-    elements.loadModels.addEventListener('click', () => {
+    elements.loadModels.addEventListener('click', function() {
       loadModels(state, elements, ensureApiConfig())
-        .then((count) => setStatus(elements, 'Loaded ' + count + ' models', 'ok'))
-        .catch((error) => setStatus(elements, error.message, 'error'));
+        .then(function(count) { setStatus(elements, 'Loaded ' + count + ' models', 'ok'); })
+        .catch(function(error) { setStatus(elements, error.message, 'error'); });
     });
 
-    elements.checkModels.addEventListener('click', () => {
+    elements.checkModels.addEventListener('click', function() {
       checkAllModels(state, elements, ensureApiConfig())
-        .then(({ availableCount, unavailableCount }) => {
-          setStatus(elements, 'Checked: ' + availableCount + ' available, unavailable: ' + unavailableCount, availableCount > 0 ? 'ok' : 'error');
+        .then(function(result) {
+          setStatus(elements, 'Checked: ' + result.availableCount + ' available, unavailable: ' + result.unavailableCount, result.availableCount > 0 ? 'ok' : 'error');
         })
-        .catch((error) => setStatus(elements, error.message, 'error'));
+        .catch(function(error) { setStatus(elements, error.message, 'error'); });
     });
 
-    elements.modelFilter.addEventListener('input', () => renderModelList(state, elements));
-    elements.availableOnly.addEventListener('change', () => renderModelList(state, elements));
-    elements.modelInput.addEventListener('input', () => renderModelList(state, elements));
+    elements.modelFilter.addEventListener('input', function() { renderModelList(state, elements); });
+    elements.availableOnly.addEventListener('change', function() { renderModelList(state, elements); });
+    elements.modelInput.addEventListener('input', function() { renderModelList(state, elements); });
     elements.saveModel.addEventListener('click', saveModelSelection);
 
-    elements.chatForm.addEventListener('submit', (event) => {
+    elements.chatForm.addEventListener('submit', function(event) {
       event.preventDefault();
       if (state.isSending) return;
 
@@ -301,21 +792,21 @@ export function getHtml() {
       elements.prompt.value = '';
 
       sendMessage(state, elements, ensureApiConfig())
-        .then(() => setStatus(elements, 'Ready', ''))
-        .catch((error) => {
+        .then(function() { setStatus(elements, 'Ready', ''); })
+        .catch(function(error) {
           if (error.name !== 'AbortError') {
             setStatus(elements, 'Request failed', 'error');
           }
         });
     });
 
-    elements.stopButton.addEventListener('click', () => {
+    elements.stopButton.addEventListener('click', function() {
       if (state.abortController) {
         state.abortController.abort();
       }
     });
 
-    elements.clearHistory.addEventListener('click', () => {
+    elements.clearHistory.addEventListener('click', function() {
       if (state.isSending) return;
       state.messages = [];
       sessionStorage.removeItem(SESSION_KEYS.messages);
