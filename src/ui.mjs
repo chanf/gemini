@@ -769,7 +769,12 @@ const UI_HTML = `<!doctype html>
 
         var role = document.createElement('div');
         role.className = 'msg-role';
-        role.textContent = item.role === 'assistant' ? 'Assistant' : 'User';
+        if (item.role === 'assistant') {
+          var modelText = item.model ? ' (' + item.model + ')' : '';
+          role.textContent = 'Assistant' + modelText;
+        } else {
+          role.textContent = 'User';
+        }
 
         var bubble = document.createElement('div');
         bubble.className = 'msg-bubble';
@@ -961,7 +966,7 @@ const UI_HTML = `<!doctype html>
       var model = getActiveModel();
 
       var userMessage = { role: 'user', content: promptText };
-      var assistantMessage = { role: 'assistant', content: '' };
+      var assistantMessage = { role: 'assistant', content: '', model: model };
       state.messages.push(userMessage);
       state.messages.push(assistantMessage);
       persistMessages();
