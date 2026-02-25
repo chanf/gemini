@@ -12,6 +12,8 @@ test("handleUiRequest returns html for /ui paths", async () => {
 
   const body = await response.text();
   assert.ok(body.includes("Gemini Proxy Test Console"));
+  assert.ok(body.includes("config.apiBase.replace(/\\/models$/"));
+  assert.ok(body.includes("apiBase = apiBase.replace(/\\/chat\\/completions$/"));
 });
 
 test("handleUiRequest ignores non-ui paths", () => {
