@@ -1054,7 +1054,7 @@ const UI_HTML = `<!doctype html>
           renderHistory();
         }
 
-        setStatus('Response completed', 'ok');
+        setStatus('Ready', '');
       } catch (error) {
         if (error && error.name === 'AbortError') {
           setStatus('Generation stopped by user', 'error');
