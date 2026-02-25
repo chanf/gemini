@@ -106,7 +106,7 @@ export async function sendMessage(state, elements, config) {
 
   try {
     // Remove trailing /chat/completions from apiBase if present, then add /chat/completions
-    const apiBase = config.apiBase.replace(/\/chat\/completions$/, '');
+    const apiBase = config.apiBase.replace(new RegExp('/chat/completions$'), '');
     const response = await fetch(apiBase + '/chat/completions', {
       method: 'POST',
       headers: {

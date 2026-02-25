@@ -3,7 +3,7 @@ import { safeJsonParse } from './markdown.mjs';
 
 export async function loadModels(state, elements, config) {
   // Remove trailing /models from apiBase if present, then add /models
-  const apiBase = config.apiBase.replace(/\/models$/, '');
+  const apiBase = config.apiBase.replace(new RegExp('/models$'), '');
   const response = await fetch(apiBase + '/models', {
     method: 'GET',
     headers: {
@@ -94,7 +94,7 @@ export async function checkSingleModel(state, elements, modelId, config) {
   updateModelStatus(state, elements, modelId, 'checking');
   try {
     // Remove trailing /chat/completions from apiBase if present, then add /chat/completions
-    const apiBase = config.apiBase.replace(/\/chat\/completions$/, '');
+    const apiBase = config.apiBase.replace(new RegExp('/chat/completions$'), '');
     const response = await fetch(apiBase + '/chat/completions', {
       method: 'POST',
       headers: {
