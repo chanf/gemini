@@ -12,6 +12,7 @@ export function getHtml() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gemini Proxy UI</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='grad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%234285f4'/%3E%3Cstop offset='25%25' style='stop-color:%2334a853'/%3E%3Cstop offset='50%25' style='stop-color:%23fbbc05'/%3E%3Cstop offset='75%25' style='stop-color:%23ea4335'/%3E%3Cstop offset='100%25' style='stop-color:%239c27b0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='6' fill='url(%23grad)'/%3E%3Ccircle cx='16' cy='12' r='4' fill='white' opacity='0.9'/%3E%3Cellipse cx='16' cy='22' rx='6' ry='3' fill='white' opacity='0.7'/%3E%3C/svg%3E">
   <style>${STYLES}</style>
 </head>
 <body>
