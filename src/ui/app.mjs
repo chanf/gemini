@@ -412,8 +412,8 @@ export function getHtml() {
       state.abortController = new AbortController();
       setSendingState(elements, true);
 
-      let apiBase = config.apiBase.replace(/\/models$/, '');
-      apiBase = apiBase.replace(/\/chat\/completions$/, '');
+      let apiBase = config.apiBase.replace(/\\/models$/, '');
+      apiBase = apiBase.replace(/\\/chat\\/completions$/, '');
 
       return fetch(apiBase + '/chat/completions', {
         method: 'POST',
@@ -482,7 +482,7 @@ export function getHtml() {
     }
 
     function loadModels(state, elements, config) {
-      let apiBase = config.apiBase.replace(/\/models$/, '');
+      let apiBase = config.apiBase.replace(/\\/models$/, '');
       return fetch(apiBase + '/models', {
         method: 'GET',
         headers: {
@@ -581,8 +581,8 @@ export function getHtml() {
 
     function checkSingleModel(state, elements, modelId, config) {
       updateModelStatus(state, elements, modelId, 'checking');
-      let apiBase = config.apiBase.replace(/\/models$/, '');
-      apiBase = apiBase.replace(/\/chat\/completions$/, '');
+      let apiBase = config.apiBase.replace(/\\/models$/, '');
+      apiBase = apiBase.replace(/\\/chat\\/completions$/, '');
 
       return fetch(apiBase + '/chat/completions', {
         method: 'POST',
