@@ -1108,7 +1108,7 @@ const UI_HTML = `<!doctype html>
 
       var availableCount = Object.values(state.modelStatus).filter(function (s) { return s === 'available'; }).length;
       var unavailableCount = Object.values(state.modelStatus).filter(function (s) { return s === 'unavailable'; }).length;
-      setStatus('Checked: ' + availableCount + ' available, 'unavailable: ' + unavailableCount, availableCount > 0 ? 'ok' : 'error');
+      setStatus('Checked: ' + availableCount + ' available, unavailable: ' + unavailableCount, availableCount > 0 ? 'ok' : 'error');
     }
 
     async function loadModels() {
